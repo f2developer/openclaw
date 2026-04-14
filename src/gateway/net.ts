@@ -272,6 +272,8 @@ function detectContainerEnvironment(): boolean {
     ) {
       return true;
     }
+  } catch {
+    // /proc may not exist (macOS, Windows, or non-Linux host) — not a container
   }
 
   // 3. Known cloud provider environment variables.
