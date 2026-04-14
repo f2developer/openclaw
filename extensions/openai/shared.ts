@@ -1,0 +1,107 @@
+import type { OpenClawConfig } from "openclaw/plugin-sdk/config-runtime";
+import { findCatalogTemplate } from "openclaw/plugin-sdk/provider-catalog-shared";
+import {
+  cloneFirstTemplateModel,
+  matchesExactOrPrefix,
+} from "openclaw/plugin-sdk/provider-model-shared";
+import { buildProviderStreamFamilyHooks } from "openclaw/plugin-sdk/provider-stream-family";
+import { normalizeOptionalString } from "openclaw/plugin-sdk/text-runtime";
+
+type SyntheticOpenAIModelCatalogCost = {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+};
+
+type SyntheticOpenAIModelCatalogEntry = {
+  provider: string;
+  id: string;
+  name: string;
+  reasoning?: boolean;
+  input?: ("text" | "image")[];
+  contextWindow?: number;
+  contextTokens?: number;
+  cost?: SyntheticOpenAIModelCatalogCost;
+};
+
+export const OPENAI_API_BASE_URL = "https://api.openai.com/v1";
+export const OPENAI_RESPONSES_STREAM_HOOKS = buildProviderStreamFamilyHooks(
+  "openai-responses-defaults",
+);
+
+export function toOpenAIDataUrl(buffer: Buffer, mimeType: string): string {
+  return `data:${mimeType};base64,${buffer.toString("base64")}`;
+}
+
+export function resolveConfiguredOpenAIBaseUrl(cfg: OpenClawConfig | undefined): string {
+  return normalizeOptionalString(cfg?.models?.providers?.openai?.baseUrl) ?? OPENAI_API_BASE_URL;
+}
+
+export function isOpenAIApiBaseUrl(baseUrl?: string): boolean {
+  const trimmed = normalizeOptionalString(baseUrl);
+  if (!trimmed) {
+    return false;
+  }
+  return /^https?:\/\/api\.openai\.com(?:\/v1)?\/?$/i.test(trimmed);
+}
+
+export function isOpenAICodexBaseUrl(baseUrl?: string): boolean {
+  const trimmed = normalizeOptionalString(baseUrl);
+  if (!trimmed) {
+    return false;
+  }
+  return /^https?:\/\/chatgpt\.com\/backend-api\/?$/i.test(trimmed);
+}
+
+function hasSupportedOpenAIResponsesTransport(
+  transport: unknown,
+): transport is "auto" | "sse" | "websocket" {
+  return transport === "auto" || transport === "sse" || transport === "websocket";
+}
+
+export function defaultOpenAIResponsesExtraParams(
+  extraParams: Record<string, unknown> | undefined,
+  options?: { openaiWsWarmup?: boolean },
+): Record<string, unknown> | undefined {
+  const hasSupportedTransport = hasSupportedOpenAIResponsesTransport(extraParams?.transport);
+  const hasExplicitWarmup = typeof extraParams?.openaiWsWarmup === "boolean";
+  const shouldDefaultWarmup = options?.openaiWsWarmup === true;
+  if (hasSupportedTransport && (!shouldDefaultWarmup || hasExplicitWarmup)) {
+    return extraParams;
+  }
+
+  return {
+    ...extraParams,
+    ...(hasSupportedTransport ? {} : { transport: "auto" }),
+    ...(shouldDefaultWarmup && !hasExplicitWarmup ? { openaiWsWarmup: true } : {}),
+  };
+}
+
+export function buildOpenAISyntheticCatalogEntry(
+  template: ReturnType<typeof findCatalogTemplate>,
+  entry: {
+    id: string;
+    reasoning: boolean;
+    input: readonly ("text" | "image")[];
+    contextWindow: number;
+    contextTokens?: number;
+    cost?: SyntheticOpenAIModelCatalogCost;
+  },
+): SyntheticOpenAIModelCatalogEntry | undefined {
+  if (!template) {
+    return undefined;
+  }
+  return {
+    ...template,
+    id: entry.id,
+    name: entry.id,
+    reasoning: entry.reasoning,
+    input: [...entry.input],
+    contextWindow: entry.contextWindow,
+    ...(entry.contextTokens === undefined ? {} : { contextTokens: entry.contextTokens }),
+    ...(entry.cost === undefined ? {} : { cost: entry.cost }),
+  };
+}
+
+export { cloneFirstTemplateModel, findCatalogTemplate, matchesExactOrPrefix };
