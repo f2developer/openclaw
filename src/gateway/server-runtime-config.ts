@@ -123,11 +123,20 @@ export async function resolveGatewayRuntimeConfig(params: {
     process.env.OPENCLAW_SKIP_CANVAS_HOST !== "1" && params.cfg.canvasHost?.enabled !== false;
 
   const trustedProxies = params.cfg.gateway?.trustedProxies ?? [];
-  const controlUiAllowedOrigins = (params.cfg.gateway?.controlUi?.allowedOrigins ?? [])
+  const envAllowedOriginsRaw = process.env.OPENCLAW_GATEWAY_CONTROL_UI_ALLOWED_ORIGINS?.trim();
+  const envAllowedOrigins = envAllowedOriginsRaw
+    ? envAllowedOriginsRaw.split(",").map((v) => v.trim())
+    : [];
+  const controlUiAllowedOrigins = [
+    ...(params.cfg.gateway?.controlUi?.allowedOrigins ?? []),
+    ...envAllowedOrigins,
+  ]
     .map((value) => value.trim())
     .filter(Boolean);
+
   const dangerouslyAllowHostHeaderOriginFallback =
-    params.cfg.gateway?.controlUi?.dangerouslyAllowHostHeaderOriginFallback === true;
+    params.cfg.gateway?.controlUi?.dangerouslyAllowHostHeaderOriginFallback === true ||
+    process.env.OPENCLAW_GATEWAY_CONTROL_UI_DANGEROUSLY_ALLOW_HOST_HEADER_ORIGIN_FALLBACK === "true";
 
   assertGatewayAuthConfigured(resolvedAuth, params.cfg.gateway?.auth);
   if (tailscaleMode === "funnel" && authMode !== "password") {
