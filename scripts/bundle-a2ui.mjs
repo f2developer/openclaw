@@ -43,6 +43,12 @@ function normalizePath(filePath) {
   return filePath.split(path.sep).join("/");
 }
 
+async function writeMissingSourcesStubBundle() {
+  await fs.mkdir(path.dirname(outputFile), { recursive: true });
+  await fs.writeFile(outputFile, "/* A2UI bundle unavailable in this build */\n", "utf8");
+  await fs.writeFile(hashFile, "stub\n", "utf8");
+}
+
 export function isBundleHashInputPath(filePath, repoRoot = rootDir) {
   const relativePath = normalizePath(path.relative(repoRoot, filePath));
   return !ignoredBundleHashInputPrefixes.some(
@@ -169,6 +175,11 @@ async function main() {
       console.error(
         "A2UI sources missing; skipping bundle because OPENCLAW_A2UI_SKIP_MISSING=1 or OPENCLAW_SPARSE_PROFILE is set.",
       );
+      return;
+    }
+    if (process.env.CI) {
+      await writeMissingSourcesStubBundle();
+      console.warn("A2UI sources missing in CI; wrote stub bundle and hash.");
       return;
     }
     fail(`A2UI sources missing and no prebuilt bundle found at: ${outputFile}`);
